@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <base target="_top">
+    <title>学生 PAJSK 查询系统 (Serverless)</title>
+    <!-- 引入 Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* 确保使用 Inter 字体，并设置基本样式 */
+        :root {
+            font-family: 'Inter', sans-serif;
+        }
+        /* 容器居中 */
+        body {
+            background-color: #f7f7f7;
+        }
+        /* 强制 iframe 占满容器 */
+        #pdfFrame {
+            width: 100%;
+            height: 600px;
+            border: 1px solid #e5e7eb;
+        }
+        /* 针对手机屏幕，调整布局 */
+        @media (max-width: 640px) {
+            #pdfFrame {
+                height: 400px; /* 手机上高度可以略微缩短 */
+            }
+        }
+        /* CSS for Loading Spinner */
+        .loader {
+            border: 4px solid #f3f3f3; /* Light grey */
+            border-top: 4px solid #3498db; /* Blue */
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 20px auto;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body class="p-4 sm:p-8">
+    
+    <!-- 优化平板显示：使用 max-w-xl md:max-w-2xl -->
+    <div class="max-w-xl md:max-w-2xl mx-auto bg-white p-6 sm:p-8 rounded-xl shadow-2xl">
+        
+        <!-- 标题区域 -->
+        <h2 class="text-2xl sm:text-3xl font-bold text-gray-800 mb-6 text-center">
+            学生PAJSK查询系统<br>
+            <span class="text-base sm:text-xl text-indigo-600 font-medium block mt-1">SISTEM PENCARIAN PAJSK SLIP</span>
+        </h2>
+        
+        <!-- 整体消息区域 (取代 alert) -->
+        <div id="generalMessage" class="hidden p-3 my-4 rounded-lg font-semibold" role="alert"></div>
+
+        <!-- 查询表单 -->
+        <div class="mb-8 p-4 bg-indigo-50 rounded-lg">
+            <label for="studentId" class="block text-sm font-medium text-gray-700 mb-1">
+                学生身份证号码:<br>
+                <span class="text-xs text-indigo-500 font-normal">NO.KAD PENGENALAN MURID (tanpa '-')</span>
+            </label>
+            <input type="text" id="studentId" placeholder="contoh: 120606080815" 
+                   class="w-full p-3 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 text-gray-800 transition duration-150">
+            <button id="searchBtn" onclick="searchTranscript()" 
+                    class="mt-3 w-full bg-indigo-600 text-white font-bold py-3 px-4 rounded-lg shadow-md hover:bg-indigo-700 transition duration-300 transform hover:scale-[1.01] focus:outline-none focus:ring-4 focus:ring-indigo-500/50">
+                查询 CARI
+            </button>
+        </div>
+        
+        <hr class="my-6 border-gray-200">
+        
+        <!-- PDF 显示区域 -->
+        <h3 class="text-xl font-bold text-gray-800 mb-4">PAJSK SLIP</h3>
+        <div id="pdfContainer" class="mb-8 relative">
+            <!-- PDF 加载时的消息 -->
+            <p id="message" class="text-center text-sm text-gray-500 mb-4">请在上方输入身份证号码进行查询。</p>
+            
+            <!-- 加载指示器 (初始隐藏) -->
+            <div id="loader" class="loader hidden"></div>
+
+            <!-- iframe 用于显示 PDF -->
+            <iframe id="pdfFrame" frameborder="0" style="display: none;" class="rounded-lg shadow-inner" referrerpolicy="no-referrer"></iframe>
+        </div>
+
+        <hr class="my-6 border-gray-200">
+
+        <!-- 家长反馈表单 -->
+        <h3 class="text-xl font-bold text-gray-800 mb-4">
+            家长核对 <span class="text-red-500 text-sm font-normal">(提交需验证身份)</span><br>
+            <span class="text-base text-gray-600 font-medium">PENGESAHAN IBU BAPA/PENJAGA</span>
+        </h3>
+        
+        <form id="feedbackForm" class="space-y-4">
+            
+            <!-- 家长姓名 -->
+            <div>
+                <label for="parentName" class="block text-sm font-medium text-gray-700 mb-1">
+                    家长/监护人姓名 <span class="text-red-500">*</span>:<br>
+                    <span class="text-xs text-gray-500">NAMA IBU BAPA/PENJAGA</span>
+                </label>
+                <input type="text" id="parentName" placeholder="请填写您的姓名 / Sila isi nama anda" required
+                        class="w-full p-3 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500">
+            </div>
+
+            <!-- 家长身份证 -->
+            <div>
+                <label for="parentId" class="block text-sm font-medium text-gray-700 mb-1">
+                    家长/监护人身份证号码 <span class="text-red-500">*</span>:<br>
+                    <span class="text-xs text-gray-500">NO.KAD PENGENALAN IBU BAPA/PENJAGA (TANPA -)</span>
+                </label>
+                <input type="text" id="parentId" placeholder="请填写您的身份证号码 / Sila isi kad pengenalan anda" required
+                        class="w-full p-3 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500">
+            </div>
+            
+            <!-- 修正意见 -->
+            <div>
+                <label for="correctionNeeded" class="block text-sm font-medium text-gray-700 mb-1">
+                    需要更改/修正之处 (选填):<br>
+                    <span class="text-xs text-gray-500">KESILAPAN DALAM SLIP (OPTIONAL)</span>
+                </label>
+                <textarea id="correctionNeeded" rows="4" 
+                              placeholder="请在此填写您认为需要更改或修正的地方（例如：学会是参与电脑学会）&#10;NYATAKAN KESILAPAN DALAM SLIP YANG PERLU DIUBAH (CTH: KELAB YANG BETUL IALAH KOMPUTER)" 
+                              class="w-full p-3 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500"></textarea>
+            </div>
+            
+            <!-- 确认复选框 -->
+            <div class="pt-2">
+                <label class="flex items-start cursor-pointer text-sm text-gray-700">
+                    <input type="checkbox" id="isChecked" class="mt-1 mr-2 rounded text-indigo-600 focus:ring-indigo-500 border-gray-300 h-4 w-4">
+                    <span>
+                        我已仔细核对PAJSK 成绩单的内容，并确认成绩单内的信息准确无误。<br>
+                        <span class="text-xs text-gray-500">Saya telah menyemak dengan teliti kandungan Slip PAJSK dan mengesahkan bahawa maklumat yang dalam slip adalah tepat.</span>
+                    </span>
+                </label>
+            </div>
+            
+            <!-- 提交按钮 -->
+            <button type="button" id="submitBtn" onclick="submitFeedback()" 
+                    class="mt-6 w-full bg-green-600 text-white font-bold py-3 px-4 rounded-lg shadow-md hover:bg-green-700 transition duration-300 transform hover:scale-[1.01] focus:outline-none focus:ring-4 focus:ring-green-500/50">
+                提交反馈 Hantar
+            </button>
+            
+        </form>
+
+    </div>
+
+    <script>
+        // Serverless API 路径
+        // 注意：这两个函数需要您在 Vercel 中分别创建两个文件：
+        // 1. api/generate-pdf.js
+        // 2. api/submit-feedback.js (用于处理反馈，并将数据存入 Supabase)
+        const PDF_API_ENDPOINT = '/api/generate-pdf';
+        const FEEDBACK_API_ENDPOINT = '/api/submit-feedback';
+
+        // ==========================================================
+        // 客户端通用函数 (取代 alert)
+        // ==========================================================
+        function showMessage(msg, isSuccess = true) {
+            const msgElement = document.getElementById('generalMessage');
+            msgElement.innerHTML = msg.replace(/\n/g, '<br>');
+            msgElement.style.display = 'block';
+
+            if (isSuccess) {
+                msgElement.className = 'p-3 my-4 rounded-lg bg-green-100 text-green-700 font-semibold';
+            } else {
+                msgElement.className = 'p-3 my-4 rounded-lg bg-red-100 text-red-700 font-semibold';
+            }
+            // 自动隐藏消息
+            setTimeout(() => {
+                msgElement.style.display = 'none';
+            }, 8000); 
+        }
+
+        // ==========================================================
+        // 1. 查询成绩单 (调用 /api/generate-pdf)
+        // ==========================================================
+        async function searchTranscript() {
+            const studentId = document.getElementById('studentId').value.trim();
+            const pdfFrame = document.getElementById('pdfFrame');
+            const message = document.getElementById('message');
+            const loader = document.getElementById('loader');
+            const searchBtn = document.getElementById('searchBtn');
+
+            document.getElementById('generalMessage').style.display = 'none';
+
+            if (!studentId) {
+                showMessage('请输入学生身份证号码。\nSila isi IC murid', false);
+                return;
+            }
+
+            // 1. 设置查询状态和加载指示器
+            searchBtn.disabled = true;
+            searchBtn.textContent = '正在查询... Menunggu...';
+            message.innerHTML = '正在查询，请稍候...<br>Proses pencarian, sila tunggu...';
+            message.className = "text-center text-gray-600 font-medium mb-4";
+            
+            pdfFrame.style.display = 'none';
+            pdfFrame.src = '';
+            loader.style.display = 'block'; // 显示加载指示器
+
+            try {
+                const response = await fetch(PDF_API_ENDPOINT, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ idCardNumber: studentId }),
+                });
+
+                loader.style.display = 'none'; // 隐藏加载指示器
+                searchBtn.disabled = false;
+                searchBtn.textContent = '查询 CARI';
+
+                const contentType = response.headers.get('content-type');
+                
+                if (response.ok && contentType && contentType.includes('application/pdf')) {
+                    // 成功: 响应是 PDF 文件 (Blob)
+                    const pdfBlob = await response.blob();
+                    const pdfUrl = URL.createObjectURL(pdfBlob);
+                    
+                    pdfFrame.src = pdfUrl;
+                    pdfFrame.style.display = 'block';
+                    message.textContent = '成绩单已显示。';
+                    message.className = "text-center text-green-600 font-medium mb-4";
+
+                } else {
+                    // 失败: 响应可能是 JSON 错误信息
+                    let errorMessage = '未找到成绩单或查询失败。';
+                    
+                    // 尝试解析 JSON 错误信息
+                    try {
+                        const errorData = await response.json();
+                        if (errorData && errorData.error) {
+                             errorMessage = errorData.error;
+                        }
+                    } catch (e) {
+                        // 忽略解析错误，使用默认消息
+                    }
+                    
+                    message.textContent = errorMessage + ' 请检查身份证号码是否正确。';
+                    message.className = "text-center text-red-600 font-medium mb-4";
+                    pdfFrame.style.display = 'none';
+                    showMessage(errorMessage + '\nSila semak semula nombor kad pengenalan.', false);
+                }
+
+            } catch (error) {
+                loader.style.display = 'none';
+                searchBtn.disabled = false;
+                searchBtn.textContent = '查询 CARI';
+                message.textContent = '查询失败：网络连接或服务器错误。';
+                message.className = "text-center text-red-600 font-medium mb-4";
+                showMessage('查询失败：服务器连接错误，请稍后重试。', false);
+                console.error("Fetch Error:", error);
+            }
+        }
+
+        // ==========================================================
+        // 2. 提交反馈 (调用 /api/submit-feedback)
+        // ==========================================================
+        async function submitFeedback() {
+            const studentId = document.getElementById('studentId').value.trim();
+            const parentName = document.getElementById('parentName').value.trim();
+            const parentId = document.getElementById('parentId').value.trim();
+            const correction = document.getElementById('correctionNeeded').value.trim();
+            const isChecked = document.getElementById('isChecked').checked;
+            const submitButton = document.getElementById('submitBtn');
+
+            // 验证必填字段
+            if (!studentId) {
+                showMessage('提交失败：请先输入学生身份证号码。\nSila isi IC murid', false);
+                return;
+            }
+            if (!parentName || !parentId) {
+                showMessage('提交失败：请填写家长姓名和身份证号码，以便核实身份。\nSila isi nama dan IC ibu bapa/penjaga', false);
+                return;
+            }
+            if (!isChecked) {
+                showMessage('提交失败：请勾选确认框，以确认已核对内容。\nSila tick petak pengesahan', false);
+                return;
+            }
+            
+            const feedbackData = {
+                studentId: studentId,
+                parentName: parentName,
+                parentId: parentId,
+                correction: correction,
+                checked: isChecked ? 'TELAH DISAHKAN' : '未确认'
+            };
+
+            // 提交按钮显示加载状态
+            submitButton.textContent = '正在提交... Menghantar...';
+            submitButton.disabled = true;
+
+            try {
+                // 调用 Vercel Serverless Function 处理反馈
+                const response = await fetch(FEEDBACK_API_ENDPOINT, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(feedbackData),
+                });
+                
+                const result = await response.json();
+                
+                submitButton.textContent = '提交反馈 Hantar';
+                submitButton.disabled = false;
+
+                if (response.ok) {
+                    // 成功
+                    showMessage(result.message || '反馈提交成功。\nMaklum balas berjaya dihantar.', true);
+                    document.getElementById('feedbackForm').reset(); // 清空表单
+                } else {
+                    // 失败，可能是后端验证或数据库错误
+                    showMessage(result.error || '提交失败：未知错误。', false);
+                }
+
+            } catch (error) {
+                // 网络连接错误
+                submitButton.textContent = '提交反馈 Hantar';
+                submitButton.disabled = false;
+                showMessage('提交失败：网络连接或服务器无响应。', false);
+                console.error("Feedback Fetch Error:", error);
+            }
+        }
+    </script>
+</body>
+</html>
